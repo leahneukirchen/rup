@@ -18,6 +18,7 @@ $replace = false
 $force = false
 $build = true
 $dry_run = false
+$names = []
 
 $opt_parser = OptionParser.new("", 24, '  ') do |opts|
   opts.banner =<<EOF
@@ -38,6 +39,7 @@ EOF
 
   opts.on("--replace", "uninstall the package with the same name first") { $replace = true }
   opts.on("-f", "--force", "overwrite existing files") { $force = true }
+  opts.on("--name NAME", "override name of package") { |name| $names << name }
 
   opts.separator "\nremove options"
 
@@ -190,7 +192,7 @@ when "install"
   ARGV.replace ["."]  if ARGV.empty?
   ARGV.each { |dir|
     Dir.chdir(dir) {
-      package = File.basename(Dir.pwd).sub(/-[^-]*$/, '')
+      package = $names.shift || File.basename(Dir.pwd).sub(/-[^-]*$/, '')
       do_build
 
       case $target
