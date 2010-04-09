@@ -1,0 +1,228 @@
+#!/usr/bin/env ruby
+# rup - a sane and simple Ruby package manager
+#
+# Copyright (C) 2010 Christian Neukirchen <purl.org/net/chneukirchen>
+#
+# rup is freely distributable under the terms of an MIT-style license.
+# See COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+require 'rbconfig'
+require 'fileutils'
+require 'digest/sha1'
+require 'optparse'
+
+Version = "0.1"
+
+$target = Process.uid == 0 ? :site : :home
+$replace = false
+$force = false
+$build = true
+$dry_run = false
+
+$opt_parser = OptionParser.new("", 24, '  ') do |opts|
+  opts.banner =<<EOF
+Usage: rup install [--site|--home|--here] DIRS...
+       rup remove LOGFILES...
+       rup list
+
+By default, install . to ~/.ruby, unless you are root, then install site-wide.
+EOF
+  
+  opts.separator "\ninstall options"
+
+  opts.on("--site", "install site-wide") { $target = :site }
+  opts.on("--home", "install to ~/.ruby and ~/bin") { $target = :home }
+  opts.on("--here", "install to .ruby") { $target = :here }
+
+  opts.on("--no-build", "skip bulding of extensions") { $build = false }
+
+  opts.on("--replace", "uninstall the package with the same name first") { $replace = true }
+  opts.on("-f", "--force", "overwrite existing files") { $force = true }
+
+  opts.separator "\nremove options"
+
+  opts.on("-f", "--force", "remove files even if they have changed") { $force = true }
+
+  opts.separator "\ngeneral options"
+  opts.on("-n", "--dry-run", "don't touch the file system") { $dry_run = true }
+
+  opts.separator ""
+  opts.on_tail("-h", "--help", "display this message") do
+    puts opts
+    exit
+  end
+  opts.on_tail("-v", "--version", "display the version") do
+    puts "rup #{Version}"
+    exit
+  end
+
+  opts.parse! ARGV
+end
+
+def expand(file)
+  File.expand_path(file.gsub(/\$(\w+)/) { Config::CONFIG[$1] })
+end
+
+def logging(dest)
+  dest = expand dest
+
+  if File.exist? dest
+    unless $replace
+      abort "Log file #{dest} already exists."
+    else
+      do_remove dest
+    end
+  end
+
+  if $dry_run
+    yield
+  else
+    FileUtils.mkdir_p(File.dirname(dest))
+    File.open(dest, "wb") { |$logfile|
+      yield
+    }
+  end
+end
+
+def do_remove(pkg)
+  files = []
+  IO.foreach(pkg) { |line|
+    sha1, filename = line.chomp.split("  ", 2)
+    contents = File.open(filename, "rb") { |f| f.read }  rescue ""
+    unless Digest::SHA1.hexdigest(contents) == sha1
+      warn "Checksum mismatch: " + filename
+      next  unless !$force
+    end
+    
+    puts "removing #{filename}"
+    unless $dry_run
+      File.delete  filename
+    end
+    files << filename
+  }
+
+  dirs = files.map { |f| File.dirname f }.uniq.sort_by { |f| -f.size }
+  dirs.each { |dir|
+    begin
+      Dir.delete dir  unless $dry_run
+      puts "removing #{dir}"
+    rescue Errno::ENOTEMPTY
+    rescue
+      p $!
+    end
+  }
+
+  File.delete pkg  unless $dry_run
+end
+
+def do_build
+  return  unless $build
+
+  dest = expand("lib")
+  Dir["**/extconf.rb"].each { |extconf|
+    Dir.chdir(File.dirname(extconf)) {
+      system "ruby", "extconf.rb"
+      mf = File.read('Makefile')
+      mf = mf.gsub(/^RUBYARCHDIR\s*=\s*\$[^$]*/, "RUBYARCHDIR = #{dest}")
+      mf = mf.gsub(/^RUBYLIBDIR\s*=\s*\$[^$]*/, "RUBYLIBDIR = #{dest}")
+      File.open('Makefile', 'wb') {|f| f.print mf}
+      system "make"
+      system "make install"
+    }
+  }
+end
+
+def owner(file)
+  [expand("~/.ruby/.*.rup"),
+   expand(".ruby/.*.rup"),
+   expand("$sitelibdir/.*.rup")].each { |dir|
+    Dir[dir].each { |pkg|
+      files = File.read(pkg).split("\n").map { |l| l.split("  ", 2)[1] }
+      if files.include? file
+        return pkg
+      end
+    }
+  }
+
+  return "<unknown>"
+end
+
+def do_install(src, destdir, mode, options={})
+  destdir = expand(destdir)
+
+  begin
+    Dir.chdir(src) {
+      Dir["**/*"].each { |file|
+        dest = File.join(destdir, file)
+        
+        next  unless File.file?(file)
+        next  if File.dirname(file)  =~ %r{\.svn|CVS}
+        next  if File.basename(file) =~ %r{\A(#.*|.*~|.*\.(orig|rej|bak))\z}
+        next  if options[:no_overwrite] && File.exist?(dest)
+        
+        # The time where we had to copy files in 512k blocks is over.
+        contents = File.open(file, "rb") { |f| f.read }
+        
+        contents.gsub!(/\A\#!.*ruby\S*/, '#!/usr/bin/env ruby')  if options[:fix_shebang]
+
+        if File.exist?(dest) && !$force
+          warn "won't overwrite #{dest}, owned by #{owner dest}"
+          next
+        end
+        
+        puts "installing #{dest}"
+        unless $dry_run
+          $logfile.puts "%s  %s" % [Digest::SHA1.hexdigest(contents), dest]
+          FileUtils.mkdir_p(File.dirname(dest))
+          File.open(dest, "wb") { |out|
+            out.write contents
+            out.chmod mode
+          }
+        end
+      }
+    }
+  rescue Errno::ENOENT
+  end
+end
+
+case ARGV.shift
+when "install"
+  ARGV.replace ["."]  if ARGV.empty?
+  ARGV.each { |dir|
+    Dir.chdir(dir) {
+      package = File.basename(Dir.pwd).sub(/-[^-]*$/, '')
+      do_build
+
+      case $target
+      when :site
+        logging "$sitelibdir/.#{package}.rup" do
+          do_install("bin",  "$prefix/bin",  0755, :fix_shebang => true)
+          do_install("sbin", "$prefix/sbin", 0755, :fix_shebang => true)
+          do_install("etc",  "$sysconfdir",  0644, :no_overwrite => true)
+          do_install("lib",  "$sitelibdir",  0644)
+        end
+      when :home
+        logging "~/.ruby/.#{package}.rup" do
+          do_install("bin",  "~/bin", 0755, :fix_shebang => true)
+          do_install("sbin", "~/bin", 0755, :fix_shebang => true)
+          do_install("lib",  "~/.ruby", 0644)
+        end
+      when :here
+        logging ".ruby/.#{package}.rup" do
+          do_install("lib",  ".ruby", 0644)
+        end
+      end
+    }
+  }
+when "remove"
+  abort "Remove what?"  if ARGV.empty?
+  ARGV.each { |pkg|
+    do_remove(pkg)
+  }
+when "list"
+  Dir[expand("$sitelibdir/.*.rup")].each { |p| puts "site/#{p[/\.([^.]+)\.rup/, 1]}" }
+  Dir[expand("~/.ruby/.*.rup")].each { |p| puts "home/#{p[/\.([^.]+)\.rup/, 1]}" }
+  Dir[expand(".ruby/.*.rup")].each { |p| puts "here/#{p[/\.([^.]+)\.rup/, 1]}" }
+else
+  abort $opt_parser.to_s
+end
