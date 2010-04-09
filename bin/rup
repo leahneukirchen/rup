@@ -22,9 +22,9 @@ $names = []
 
 $opt_parser = OptionParser.new("", 24, '  ') do |opts|
   opts.banner =<<EOF
-Usage: rup install [--site|--home|--here] DIRS...
-       rup remove LOGFILES...
-       rup list
+Usage: rup install [--site|--home|--here] [DIRS...]
+       rup remove PKGS...
+       rup list [PKGS...]
 
 By default, install . to ~/.ruby, unless you are root, then install site-wide.
 EOF
@@ -63,6 +63,42 @@ end
 
 def expand(file)
   File.expand_path(file.gsub(/\$(\w+)/) { Config::CONFIG[$1] })
+end
+
+def name2path(name)
+  return name  if name =~ /.rup\z/ && File.exist?(name)
+
+  case name
+  when %r{\Asite/(.+)}
+    expand("$sitelibdir/.#$1.rup")
+  when %r{\Ahome/(.+)}
+    expand("~/.ruby/.#$1.rup")
+  when %r{\Ahere/(.+)}
+    expand(".ruby/.#$1.rup")
+  else
+    if File.exist?(n = name2path("here/#{name}"))
+      n
+    elsif File.exist?(n = name2path("home/#{name}"))
+      n
+    elsif File.exist?(n = name2path("site/#{name}"))
+      n
+    else
+      abort "Unknown package: #{name}"
+    end
+  end
+end
+
+def path2name(path)
+  case path
+  when %r{\A#{expand "$sitelibdir"}/.(.+).rup\z}
+    "site/#$1"
+  when %r{\A#{expand "~/.ruby"}/.(.+).rup\z}
+    "home/#$1"
+  when %r{\A#{expand ".ruby"}/.(.+).rup\z}
+    "here/#$1"
+  else
+    path
+  end
 end
 
 def logging(dest)
@@ -141,7 +177,7 @@ def owner(file)
     Dir[dir].each { |pkg|
       files = File.read(pkg).split("\n").map { |l| l.split("  ", 2)[1] }
       if files.include? file
-        return pkg
+        return path2name(pkg)
       end
     }
   }
@@ -219,12 +255,20 @@ when "install"
 when "remove"
   abort "Remove what?"  if ARGV.empty?
   ARGV.each { |pkg|
-    do_remove(pkg)
+    do_remove(name2path(pkg))
   }
 when "list"
-  Dir[expand("$sitelibdir/.*.rup")].each { |p| puts "site/#{p[/\.([^.]+)\.rup/, 1]}" }
-  Dir[expand("~/.ruby/.*.rup")].each { |p| puts "home/#{p[/\.([^.]+)\.rup/, 1]}" }
-  Dir[expand(".ruby/.*.rup")].each { |p| puts "here/#{p[/\.([^.]+)\.rup/, 1]}" }
+  if ARGV.empty?
+    Dir[expand("$sitelibdir/.*.rup")].each { |p| puts path2name(p) }
+    Dir[expand("~/.ruby/.*.rup")].each { |p| puts path2name(p) }
+    Dir[expand(".ruby/.*.rup")].each { |p| puts path2name(p) }
+  else
+    ARGV.each { |pkg|
+      IO.foreach(name2path(pkg)) { |line|
+        puts line.split("  ", 2)[1]
+      }
+    }
+  end
 else
   abort $opt_parser.to_s
 end

@@ -41,7 +41,7 @@ For users:
   home/mehquux
   here/foobar
 
-  coolproject% rup remove .ruby/.foobar.rup
+  coolproject% rup remove foobar
   root# rup remove /usr/lib/ruby/site_ruby/1.9.1/.coolpackage.rup
 
 == Installation
