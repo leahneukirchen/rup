@@ -180,10 +180,13 @@ def logs
   }
 end
 
+def files(pkg)
+  File.read(name2path(pkg)).split("\n").map { |l| l.split("  ", 2)[1] }
+end
+
 def owner(file)
   logs.each { |pkg|
-    files = File.read(name2path(pkg)).split("\n").map { |l| l.split("  ", 2)[1] }
-    if files.include? file
+    if files(pkg).include? file
       return pkg
     end
   }
@@ -280,9 +283,7 @@ when "list"
     puts logs
   else
     ARGV.each { |pkg|
-      IO.foreach(name2path(pkg)) { |line|
-        puts line.split("  ", 2)[1]
-      }
+      puts files(pkg)
     }
   end
 when "owner"
