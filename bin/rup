@@ -72,9 +72,9 @@ def name2path(name)
   when %r{\Asite/(.+)}
     expand("$sitelibdir/.#$1.rup")
   when %r{\Ahome/(.+)}
-    expand("~/.ruby/.#$1.rup")
+    expand("~/.ruby/lib/.#$1.rup")
   when %r{\Ahere/(.+)}
-    expand(".ruby/.#$1.rup")
+    expand(".ruby/lib/.#$1.rup")
   else
     if File.exist?(n = name2path("here/#{name}"))
       n
@@ -92,9 +92,9 @@ def path2name(path)
   case path
   when %r{\A#{expand "$sitelibdir"}/.(.+).rup\z}
     "site/#$1"
-  when %r{\A#{expand "~/.ruby"}/.(.+).rup\z}
+  when %r{\A#{expand "~/.ruby/lib"}/.(.+).rup\z}
     "home/#$1"
-  when %r{\A#{expand ".ruby"}/.(.+).rup\z}
+  when %r{\A#{expand ".ruby/lib"}/.(.+).rup\z}
     "here/#$1"
   else
     path
@@ -172,8 +172,8 @@ def do_build
 end
 
 def owner(file)
-  [expand("~/.ruby/.*.rup"),
-   expand(".ruby/.*.rup"),
+  [expand("~/.ruby/lib/.*.rup"),
+   expand(".ruby/lib/.*.rup"),
    expand("$sitelibdir/.*.rup")].each { |dir|
     Dir[dir].each { |pkg|
       files = File.read(pkg).split("\n").map { |l| l.split("  ", 2)[1] }
@@ -241,14 +241,16 @@ when "install"
           do_install("lib",  "$sitelibdir",  0644)
         end
       when :home
-        logging "~/.ruby/.#{package}.rup" do
+        logging "~/.ruby/lib/.#{package}.rup" do
           do_install("bin",  "~/bin", 0755, :fix_shebang => true)
           do_install("sbin", "~/bin", 0755, :fix_shebang => true)
-          do_install("lib",  "~/.ruby", 0644)
+          do_install("lib",  "~/.ruby/lib", 0644)
         end
       when :here
-        logging ".ruby/.#{package}.rup" do
-          do_install("lib",  ".ruby", 0644)
+        logging ".ruby/lib/.#{package}.rup" do
+          do_install("bin",  ".ruby/bin", 0755, :fix_shebang => true)
+          do_install("sbin", ".ruby/bin", 0755, :fix_shebang => true)
+          do_install("lib",  ".ruby/lib", 0644)
         end
       end
     }
@@ -261,8 +263,8 @@ when "remove"
 when "list"
   if ARGV.empty?
     Dir[expand("$sitelibdir/.*.rup")].each { |p| puts path2name(p) }
-    Dir[expand("~/.ruby/.*.rup")].each { |p| puts path2name(p) }
-    Dir[expand(".ruby/.*.rup")].each { |p| puts path2name(p) }
+    Dir[expand("~/.ruby/lib/.*.rup")].each { |p| puts path2name(p) }
+    Dir[expand(".ruby/lib/.*.rup")].each { |p| puts path2name(p) }
   else
     ARGV.each { |pkg|
       IO.foreach(name2path(pkg)) { |line|

@@ -26,6 +26,8 @@ For users:
 * Very easy to use and understand.
 * No runtime dependencies, it's just plain Ruby.
 * Easy to write tools for.
+* Easy to override system- or user-installed packages by installing
+  them into the project directory.
 
 == Usage
 
