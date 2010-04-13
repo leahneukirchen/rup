@@ -1,0 +1,32 @@
+#!/bin/sh
+# ruby-wrapper - a tiny Ruby selector that sets up meaningful paths
+#
+# Written by Christian Neukirchen <purl.org/net/chneukirchen>, 2010.
+# To the extent possible under law, the creator of this work has waived
+# all copyright and related or neighboring rights to this work.
+# http://creativecommons.org/publicdomain/zero/1.0/
+#
+# This script is meant to be installed as "ruby" in your path.
+# It also should work with dash.  You should adjust DEFAULT_RUBY.
+DEFAULT_RUBY=/usr/bin/ruby-1.8
+
+RUBY=${RUBY:-$DEFAULT_RUBY}
+PRJ=.
+BIN=
+
+until [ -d $PRJ/bin -o -d $PRJ/lib -o "$(readlink -f $PRJ)" = / ]; do
+  PRJ=$PRJ/..
+done
+
+for path in ~/.ruby/bin $PRJ/.ruby/bin $PRJ/vendor/*/bin $PRJ/bin; do
+  [ -d $path ] && export RUBYPATH=$path:$RUBYPATH
+  [ -x $path/$RUBY ] && BIN=$path/$RUBY
+done
+
+for path in ~/.ruby/lib $PRJ/.ruby/lib $PRJ/vendor/*/lib $PRJ/lib; do
+  [ -d $path ] && export RUBYLIB=$path:$RUBYLIB
+done
+
+BIN=${BIN:-$RUBY}
+[ -L $BIN ] && BIN=$(readlink $BIN)
+exec $BIN "$@"

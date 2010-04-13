@@ -1,0 +1,90 @@
+= ruby-wrapper - a tiny Ruby selector that sets up meaningful paths
+
+ruby-wrapper is a tiny shell script that wraps multiple Ruby
+installations and allows clever management of $LOAD_PATH.
+
+ruby-wrapper should be totally transparent in use: you don't need to
+change any code.
+
+== Directory structure
+
+  ~/.ruby/lib
+  ~/.ruby/bin
+  $PROJECT/.ruby/lib
+  $PROJECT/.ruby/bin
+  $PROJECT/bin
+  $PROJECT/lib
+  $PROJECT/vendor/*/bin
+  $PROJECT/vendor/*/lib
+
+== Determining $PROJECT
+
+Go up the directory tree until there is a lib/ or a bin/ directory.
+
+== New environment variables
+
+RUBY:: Select $RUBY from the $RUBYPATH/$PATH as Ruby binary.
+
+== Changed environment variables
+
+RUBYLIB:: gets prefixed with (first searched first):
+  $PROJECT/lib
+  $PROJECT/vendor/*/lib
+  $PROJECT/.ruby/lib
+  ~/.ruby/lib
+
+RUBYPATH:: gets prefixed with:
+  $PROJECT/bin
+  $PROJECT/vendor/*/bin
+  $PROJECT/.ruby/bin
+  ~/.ruby/bin
+
+This allows you to run binaries with ruby -S coolprogram,
+or directly with bin/coolprogram if the shebang points
+to ruby-wrapper.
+
+== Installation
+
+Adjust DEFAULT_RUBY in the script, then:
+
+  % cp ruby-wrapper ~/bin/ruby
+
+You'll want to ensure your globally installed Ruby tools (irb etc.)
+use "#!/usr/bin/env ruby".
+
+== Usage
+
+  # DWIM
+  % ruby ...
+
+== Advanced usage
+
+  # No need to setup paths
+  coolproject/test% ruby test_all.rb
+  coolproject% bin/coolprogram
+
+  # Tools should use ruby-wrapper
+  coolproject% irb
+  >> require 'coolproject'
+  => true
+  # else...
+  coolproject% ruby -S irb
+
+  # Vendoring
+  coolproject% mkdir vendor
+  coolproject% cp -r ~/projects/foo vendor
+  coolproject% irb -rfoo
+
+  # Choose Ruby interpreter
+  coolproject% RUBY=ruby-1.8 coolprogram
+  coolproject% RUBY=ruby-1.9 coolprogram
+  coolproject% RUBY=~/src/rubinius/bin/rbx coolprogram
+
+  # Change default Ruby interpreter
+  coolproject% mkdir -p .ruby/bin
+  coolproject% ln -s /usr/bin/ruby-1.9 .ruby/bin/ruby
+  coolproject% bin/coolprogram
+
+== Advanced usage with rup
+
+  coolproject% rup install --here ~/src/thirdpartyproject
