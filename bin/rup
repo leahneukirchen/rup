@@ -154,19 +154,20 @@ def do_remove(pkg)
   File.delete pkg  unless $dry_run
 end
 
+def extdirs
+  Dir["**/extconf.rb"].map { |extconf|
+    File.dirname(extconf)
+  }
+end
+
 def do_build
   return  unless $build
 
   dest = expand("lib")
-  Dir["**/extconf.rb"].each { |extconf|
-    Dir.chdir(File.dirname(extconf)) {
+  extdirs.each { |extdir|
+    Dir.chdir(extdir) {
       system "ruby", "extconf.rb"
-      mf = File.read('Makefile')
-      mf = mf.gsub(/^RUBYARCHDIR\s*=\s*\$[^$]*/, "RUBYARCHDIR = #{dest}")
-      mf = mf.gsub(/^RUBYLIBDIR\s*=\s*\$[^$]*/, "RUBYLIBDIR = #{dest}")
-      File.open('Makefile', 'wb') {|f| f.print mf}
       system "make"
-      system "make install"
     }
   }
 end
@@ -195,8 +196,9 @@ def do_install(src, destdir, mode, options={})
         dest = File.join(destdir, file)
         
         next  unless File.file?(file)
-        next  if File.dirname(file)  =~ %r{\.svn|CVS}
-        next  if File.basename(file) =~ %r{\A(#.*|.*~|.*\.(orig|rej|bak))\z}
+        next  if File.dirname(file)  =~ /\.svn|CVS/
+        next  if File.basename(file) =~ /\A(#.*|.*~|.*\.(orig|rej|bak))\z/
+        next  if options[:ext_only] && File.basename(file) !~ /\.(so|dylib|bundle|dll|exe)\z/
         next  if options[:no_overwrite] && File.exist?(dest)
         
         # The time where we had to copy files in 512k blocks is over.
@@ -239,18 +241,27 @@ when "install"
           do_install("sbin", "$prefix/sbin", 0755, :fix_shebang => true)
           do_install("etc",  "$sysconfdir",  0644, :no_overwrite => true)
           do_install("lib",  "$sitelibdir",  0644)
+          extdirs.each { |extdir|
+            do_install(extdir, "$sitearchdir", 0755, :ext_only => true)
+          }
         end
       when :home
         logging "~/.ruby/lib/.#{package}.rup" do
           do_install("bin",  "~/bin", 0755, :fix_shebang => true)
           do_install("sbin", "~/bin", 0755, :fix_shebang => true)
           do_install("lib",  "~/.ruby/lib", 0644)
+          extdirs.each { |extdir|
+            do_install(extdir, "~/.ruby/lib", 0755, :ext_only => true)
+          }
         end
       when :here
         logging ".ruby/lib/.#{package}.rup" do
           do_install("bin",  ".ruby/bin", 0755, :fix_shebang => true)
           do_install("sbin", ".ruby/bin", 0755, :fix_shebang => true)
           do_install("lib",  ".ruby/lib", 0644)
+          extdirs.each { |extdir|
+            do_install(extdir, ".ruby/lib", 0755, :ext_only => true)
+          }
         end
       end
     }
