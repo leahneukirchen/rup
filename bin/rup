@@ -235,6 +235,7 @@ end
 
 case ARGV.shift
 when "install"
+  here = File.expand_path(".")
   ARGV.replace ["."]  if ARGV.empty?
   ARGV.each { |dir|
     Dir.chdir(dir) {
@@ -262,12 +263,12 @@ when "install"
           }
         end
       when :here
-        logging ".ruby/lib/.#{package}.rup" do
-          do_install("bin",  ".ruby/bin", 0755, :fix_shebang => true)
-          do_install("sbin", ".ruby/bin", 0755, :fix_shebang => true)
-          do_install("lib",  ".ruby/lib", 0644)
+        logging File.join(here, ".ruby/lib/.#{package}.rup") do
+          do_install("bin",  File.join(here, ".ruby/bin"), 0755, :fix_shebang => true)
+          do_install("sbin", File.join(here, ".ruby/bin"), 0755, :fix_shebang => true)
+          do_install("lib",  File.join(here, ".ruby/lib"), 0644)
           extdirs.each { |extdir|
-            do_install(extdir, ".ruby/lib", 0755, :ext_only => true)
+            do_install(extdir, File.join(here, ".ruby/lib"), 0755, :ext_only => true)
           }
         end
       end
